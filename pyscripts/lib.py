@@ -1,5 +1,6 @@
 import random
 import math
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import List, Set
 
@@ -103,25 +104,44 @@ class Words:
         return padding
 
 
+#holds data used by main logic code
+@dataclass
+class Mutate:
+
+    word: str
+    index: int = (0, 0)
+    blacklist: List[str] = []
+
+    def go_up(self):
+        return (self.index[0], self.index[1] - 1)
     
-#main library for creating wordsearch
-class WordsearchGenerator:
+    def go_upleft(self):
+        return (self.index[0], self.index[1] - 1)
 
-    wordsearch: Wordsearch
-    wordlist: Words
+    def go_left(self):
+        return (self.index[0], self.index[1] - 1)
 
-    def __init__(self, wordlist: Words, width: int = 500, length: int = 500) -> None:
-        self.wordlist = wordlist
-        self.totalwords = self.wordlist.len()
-        self.numofletters = self.wordlist.word_bubble()
+    def go_downleft(self):
+        return (self.index[0], self.index[1] - 1)
 
-        if self.numofletters >= math.sqrt(width * length):
-            self.wordsearch = Wordsearch(width * self.numofletters, length * self.numofletters)
+    def go_down(self):
+        return (self.index[0], self.index[1] - 1)
 
-        else:
-            self.wordsearch = Wordsearch(width, length)
+    def go_downright(self):
+        return (self.index[0], self.index[1] - 1)
+
+    def go_right(self):
+        return (self.index[0], self.index[1] - 1)
+
+    def go_upright(self):
+        return (self.index[0], self.index[1] - 1)
 
 
+
+
+#bundle the functions related to placing words
+class WordPlacer():
+    
     def pick_location(self) -> int:
         bottom_dist = 0
         top_dist = self.wordsearch.len() // self.numofletters
@@ -135,42 +155,62 @@ class WordsearchGenerator:
 
         return i
 
+    
+    def pick_direction(self, mutater: Mutate):
+        directions = [
+            mutater.go_up(),
+            mutater.go_upleft(),
+            mutater.go_left(),
+            mutater.go_downleft(),
+            mutater.go_down(),
+            mutater.go_downright(),
+            mutater.go_right(),
+            mutater.go_upright()
+        ]
 
-    def pick_direction(self, word: str, blacklist: Set[str] = set()):
-        directions = {
-            "Up": self.place(word, "Up"),
-            "Upright": self.place(word, "Upright"),
-            "Right": self.place(word, "Right"),
-            "Downright": self.place(word, "Downright"),
-            "Down": self.place(word, "Down"),
-            "Downleft": self.place(word, "Downleft"),
-            "Left": self.place(word, "Left"),
-            "Upleft": self.place(word, "Left")
-        }
+        directions2 = [x for x in directions.filter(lambda k: k not in blacklist)]
 
-        directions2 = {k: y  for (k, y) in directions.items().filter(lambda k, y: k not in blacklist)}
+        return directions2[random.choice(directions2)]
 
         
 
     
-    def place_words(self, word: str):
-        row = 0
-        column = 0
-        invalid_directions = set()
+    def place_words(self, mutater: Mutate):
+
+        
 
         for word in self.wordlist:
             while True:
-                direction = self.pick_direction
+                mutater.word = word
 
 
 
+    
+#main library for creating wordsearch
+class WordsearchGenerator(WordPlacer):
+
+    wordsearch: Wordsearch
+    wordlist: Words
+
+    def __init__(self, wordlist: Words, width: int = 500, length: int = 500) -> None:
+        self.wordlist = wordlist
+        self.totalwords = self.wordlist.len()
+        self.numofletters = self.wordlist.word_bubble()
+
+        if self.numofletters >= math.sqrt(width * length):
+            self.width = width * self.numofletters
+            self.length = length * self.numofletters
+            self.wordsearch = Wordsearch(self.width, self.length)
+            
+        else:
+            self.wordsearch = Wordsearch(width, length)
+            self.width = width
+            self.length = length
 
 
     #pick random spots to put words, a random direction, and throw the word down
     def generate_wordlist(self):
         pass
-        
-
 
 
 
