@@ -1,8 +1,9 @@
 import random
 import math
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import List, Set
+from typing import Callable, List, Tuple
 
 import numpy as np
 from nptyping import NDArray, Unicode
@@ -10,7 +11,7 @@ from nptyping import NDArray, Unicode
 
 SHORTEST_WORD_LEN = 2
 
-
+#holds dictionary and does word math
 class Dictionary:
 
     #open document with words to use
@@ -33,15 +34,17 @@ class Dictionary:
         return word in self.lexicon
 
 
+    #each word needs at least one space per letter and all letters surrounding each letter
     def word_bubble(word: str):
         if word.len() == SHORTEST_WORD_LEN:
-            return 6
+            return 6 + SHORTEST_WORD_LEN
         elif word.len() > SHORTEST_WORD_LEN:
-            return 6 + (word.len() - 2) * 2
+            return 6 + word.len() + (word.len() - 2) * 2
         else:
             print("Invalid word size...")
             return 0
 
+#factory of default wordsearches to fill
 class Wordsearch:
 
     #get dimensions, and then make "empty" wordsearch
@@ -49,21 +52,16 @@ class Wordsearch:
         arr = [['_' for i in range(width)] for i in range(length)]
         self.wordsearch = np.array(arr)
         
-
-
     #see internal state
     def __str__(self):
         return f"{self.wordsearch}"
 
-    
+    #return number of elements of wordsearch
     def __len__(self):
-        return self.wordsearch.size
-
-    
-    
-        
+        return self.wordsearch.size       
 
 
+#Holds the user's list of words
 @dataclass
 class Words:
     
@@ -71,13 +69,15 @@ class Words:
 
     #letters taken up by words
     def word_bubble(self):
-        return sum(map(lambda n: Words.by_len(n), self.words))
+        return sum(map(Words.by_len, self.words))
 
-
+    
+    #len of each word
     def by_len(word: str):
-        return word.len()
+        return len(word)
     
 
+    #method to take words from user by command line
     def get_words(self):
         user = ''
         while user != 'n':
@@ -91,12 +91,13 @@ class Words:
             self.words.sort(reverse=True, key = Words.by_len())
 
 
+    #list of words from a file
     def load_words(self, path):
         with open(path, 'r') as f:
             self.words = [word for word in f.readlines().strip()].sorted(reverse=True, key=Words.by_len())
 
     
-        #minimum number of elements for wordsearch
+    #minimum number of elements for wordsearch
     def word_padding(self):
         padding = 0
         for word in self.wordlist:
@@ -105,12 +106,16 @@ class Words:
 
 
 #holds data used by main logic code
-@dataclass
 class Mutate:
 
     word: str
-    index: int = (0, 0)
+    word_index: int = 0
+    ws_index: int = (0, 0)
+    #if we find out that we can't place a word, we need to go back
+    temp_ws_index: int = (0, 0)
     blacklist: List[str] = []
+
+    #suite of functions to return index based on direction
 
     def go_up(self):
         return (self.index[0], self.index[1] - 1)
@@ -137,12 +142,24 @@ class Mutate:
         return (self.index[0], self.index[1] - 1)
 
 
+    def to_index(n: int, width: int, length: int) -> Tuple[int, int]:
+        if n < width:
+            return (n, 0)
+        else:
+            return (n % width, n // length)
+
+
+    def from_index(location: Tuple[int, int], width: int) -> int:
+        return location[0] + location[1] * width
+
 
 
 #bundle the functions related to placing words
 class WordPlacer():
+
+
     
-    def pick_location(self) -> int:
+    def pick_location(self, start = 0) -> int:
         bottom_dist = 0
         top_dist = self.wordsearch.len() // self.numofletters
 
@@ -153,35 +170,41 @@ class WordPlacer():
             i += 1
             bottom_dist += 1
 
-        return i
+        return start + i
 
     
     def pick_direction(self, mutater: Mutate):
         directions = [
-            mutater.go_up(),
-            mutater.go_upleft(),
-            mutater.go_left(),
-            mutater.go_downleft(),
-            mutater.go_down(),
-            mutater.go_downright(),
-            mutater.go_right(),
-            mutater.go_upright()
+            mutater.go_up,
+            mutater.go_upleft,
+            mutater.go_left,
+            mutater.go_downleft,
+            mutater.go_down,
+            mutater.go_downright,
+            mutater.go_right,
+            mutater.go_upright
         ]
 
-        directions2 = [x for x in directions.filter(lambda k: k not in blacklist)]
+        directions2 = [x for x in directions.filter(lambda k: k not in mutater.blacklist)]
 
         return directions2[random.choice(directions2)]
 
-        
-
-    
-    def place_words(self, mutater: Mutate):
-
-        
-
+            
+    def place_words(self):    
         for word in self.wordlist:
+            mutater = Mutate()
+            index = (0, 0)
             while True:
                 mutater.word = word
+                
+                direction_to = self.pick_direction(mutater)
+
+    
+    def place(self, mutater: Mutate, where_to: Callable[[], int]):
+        """First go across planned word location"""
+        pass
+
+
 
 
 
