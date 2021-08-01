@@ -3,7 +3,7 @@ import math
 import sys
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import  List
+from typing import  List, Optional
 
 import numpy as np
 
@@ -79,12 +79,16 @@ class Words:
 
 
     #pick words to pad wordlist
-    def random_words(self, dictionary: Dictionary, num_of_words=1000):
+    def random_words(self, dictionary: Dictionary, num_of_words=1000) -> List[str]:
         wordlist = []
         for i in range(num_of_words):
-            wordlist.append(random.choice(dictionary.lexicon))
+            wordlist.append(random.choice(dictionary.lexicon).strip())
 
+        wordlist += self.words
+        random.shuffle(wordlist)
         return wordlist
+
+        
 
 
 #holds data used by main logic code
@@ -104,21 +108,52 @@ class Mutate:
     def black_list(self, wrong_direction: np.ndarray):
         self.blacklist.append(wrong_direction)
 
+    def upload(self, index: np.ndarray):
+        self.ws_index = index
 
-    def update(self, index):
-        self.temp_ws_index = index
+
+    def update(self):
+        self.temp_ws_index = self.ws_index
 
 
     def reset_blacklist(self):
         self.blacklist = []
 
-    def go(self, move: np.ndarray) -> None:
-        self.temp_ws_index += move
+    def go(self, move: np.ndarray) -> bool:
+        print(f"Temp is {self.temp_ws_index} and we go {move}.")
+        self.temp_ws_index = np.add(self.temp_ws_index, move)
+        if self.temp_ws_index[0] < 0 or self.temp_ws_index[1] < 0:
+            return False
+        return True
 
 
 
 #bundle the functions related to placing words
 class WordPlacer():
+
+    def get(self, index: np.ndarray) -> Optional[chr]:
+        try:
+            return self.wordsearch[index[0]][index[1]]
+        except IndexError:
+            if index[0] >= self.length:
+                return None
+
+            column = index[1]
+            row = index[0]
+            while column > self.width:
+                column -= self.width
+                row += 1
+
+                if row >= self.length:
+                    return None
+
+            
+
+            return self.wordsearch[row][column]
+            
+
+
+                    
 
     def to_index(self, n:int, location: np.ndarray) -> List[int]:
         updated = [location[0], location[1] + n]
@@ -130,10 +165,9 @@ class WordPlacer():
 
     
     def pick_location(self) -> int:
-        bottom_dist = 0
-        top_dist = len(self.wordsearch) // self.numofletters
+        top_dist = (len(self.wordsearch) * self.numofletters) // self.totalwords
 
-        return random.randint(bottom_dist, top_dist)
+        return random.randint(0, top_dist)
 
     
     def pick_direction(self, mutater: Mutate) -> List[int]:
@@ -163,7 +197,9 @@ class WordPlacer():
 
             index = self.to_index(spot, index)
 
-            mutater.update(index)
+            mutater.upload(index)
+
+            mutater.update()
             
             #runs until word is placed
             while True:                
@@ -180,8 +216,10 @@ class WordPlacer():
                         spot = self.pick_location()
 
                         index = self.to_index(spot, index)
+
+                        mutater.upload(index)
             
-                        mutater.update(index)
+                        mutater.update()
                         
                 else:
                     break
@@ -191,16 +229,19 @@ class WordPlacer():
     def place(self, mutater: Mutate, index: np.ndarray, where_to: List[int]) -> bool:
         """Returns true if word can and is placed. Otherwise, return false"""
         for letter in mutater.word:
-            getter = self.wordsearch[mutater.temp_ws_index[0]][mutater.temp_ws_index[1]] 
+            print(f"Starting at {mutater.temp_ws_index[0]} and {mutater.temp_ws_index[1]}.")
+            getter = self.get(mutater.temp_ws_index)
             if getter != '_' and getter != letter:
                 return False
 
-            mutater.go(where_to)
+            if not mutater.go(where_to):
+                return False
+            #print(f"Now at {mutater.temp_ws_index[0]} and {mutater.temp_ws_index[1]}.")
 
-        mutater.update(index)
+        mutater.update()
 
         for letter in mutater.word:
-            getter = self.wordsearch[mutater.temp_ws_index[0]][mutater.temp_ws_index[1]]
+            getter = self.get(mutater.temp_ws_index)
 
             if getter == '_':
                 self.wordsearch[mutater.temp_ws_index[0]][mutater.temp_ws_index[1]] = letter
@@ -246,7 +287,7 @@ class WordsearchGenerator(WordPlacer):
     #some vowels to make the wordsearch seem legit
     def random_vowels(self):
         vowels: str = "aeiouy"
-        for _ in range(self.totalwords):
+        for _ in range(self.totalwords * self.numofletters):
             while True:
                 column = random.randint(0, self.width)
                 row = random.randint(0, self.length)
@@ -275,22 +316,19 @@ class WordsearchGenerator(WordPlacer):
 
     def file_writer(self, wordlist: List[str], path: Path):
         wspath = path.joinpath("Wordsearch.txt")
-        np.savetxt(wspath, self.wordsearch, delimiter=" ", newline="\n")
+        np.savetxt(wspath, self.wordsearch, fmt="%c", delimiter=" ", newline="\n")
 
         wlpath = path.joinpath("Wordlist.txt")
-        with wlpath.open("f") as f:
+        with wlpath.open("w") as f:
             for word in wordlist:
                 f.write(word + "\n")
 
 
 
-    
-
-
 words = Words()
 diction = Dictionary(Path("./Sources/myDictsorted.txt"))
 words.get_words()
-words_to_paste = words.random_words(diction)
-test = WordsearchGenerator(words, 1000, 1000)
+test = WordsearchGenerator(words, 500, 500)
 test.generate_wordlist()
+words_to_paste = words.random_words(diction)
 test.file_writer(words_to_paste, Path("./Output"))
