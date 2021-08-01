@@ -1,13 +1,12 @@
 import random
 import math
 import sys
-from abc import ABC, abstractmethod
-from collections.abc import Callable
+from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Callable, List, Tuple
+from typing import  List
 
 import numpy as np
-from nptyping import NDArray, Unicode
+
 
 
 SHORTEST_WORD_LEN = 2
@@ -16,18 +15,9 @@ SHORTEST_WORD_LEN = 2
 class Dictionary:
 
     #open document with words to use
-    def __init__(self, path):
-        with open(path, 'r') as f:
-            self.lexicon = set([word for word in f.readlines()])
-
-    
-    #pick words to pad wordlist
-    def random_words(self, num_of_words=1000):
-        wordlist = []
-        for i in range(num_of_words):
-            wordlist.append(random.choic(self.lexicon))
-
-        return wordlist
+    def __init__(self, path: Path):
+        with path.open() as f:
+            self.lexicon = [word for word in f.readlines()]
 
     
     #check if word exists
@@ -75,8 +65,8 @@ class Words:
 
 
     #list of words from a file
-    def load_words(self, path):
-        with open(path, 'r') as f:
+    def load_words(self, path: Path):
+        with path.open() as f:
             self.words = [word for word in f.readlines().strip()].sorted(reverse=True, key=len)
 
     
@@ -88,11 +78,19 @@ class Words:
         return padding
 
 
+    #pick words to pad wordlist
+    def random_words(self, dictionary: Dictionary, num_of_words=1000):
+        wordlist = []
+        for i in range(num_of_words):
+            wordlist.append(random.choice(dictionary.lexicon))
+
+        return wordlist
+
+
 #holds data used by main logic code
 class Mutate:
 
     word: str
-    ws_width: int
     ws_index: np.ndarray = np.zeros(2, dtype=int)
     #if we find out that we can't place a word, we need to go back
     temp_ws_index: np.ndarray = np.zeros(2, dtype=int)
@@ -103,17 +101,12 @@ class Mutate:
         self.word = word
 
 
-    def update_location(self, location: np.ndarray):
-        self.ws_index += location
-        self.temp_ws_index = self.ws_index
-
-
     def black_list(self, wrong_direction: np.ndarray):
         self.blacklist.append(wrong_direction)
 
 
-    def reset_index(self):
-        self.temp_ws_index = self.ws_index
+    def update(self, index):
+        self.temp_ws_index = index
 
 
     def reset_blacklist(self):
@@ -123,20 +116,18 @@ class Mutate:
         self.temp_ws_index += move
 
 
-    def to_index(n: int, width: int) -> List[int]:
-        if n < width:
-            return (n, 0)
-        else:
-            return [n // width, n % width]
-
-
-    def from_index(self, width: int) -> int:
-        return self.ws_index[0] + self.ws_index[1] * width 
-
-
 
 #bundle the functions related to placing words
 class WordPlacer():
+
+    def to_index(self, n:int, location: np.ndarray) -> List[int]:
+        updated = [location[0], location[1] + n]
+
+        if updated[1] >= self.width:
+            return [updated[0] + 1, updated[1] - self.width]
+        else:
+            return updated
+
     
     def pick_location(self) -> int:
         bottom_dist = 0
@@ -161,19 +152,23 @@ class WordPlacer():
         return random.choice([x for x in filter(lambda k: k not in mutater.blacklist, directions)])
 
             
-    def place_words(self):    
+    def place_words(self):
+        index = np.zeros(2, dtype=int)   
         for word in self.wordlist.words:
             mutater = Mutate()
 
             mutater.put_word(word)
 
-            spot = self.pick_location(mutater.from_index(self.width))
-            mutater.update_location(Mutate.to_index(spot, self.width))
+            spot = self.pick_location()
+
+            index = self.to_index(spot, index)
+
+            mutater.update(index)
             
             #runs until word is placed
             while True:                
                 direction_to = self.pick_direction(mutater)
-                result = self.place(mutater, direction_to)
+                result = self.place(mutater, index, direction_to)
                 
                 if result is False:
                     mutater.black_list(direction_to)
@@ -182,31 +177,33 @@ class WordPlacer():
                     if len(mutater.blacklist) == 8:
                         mutater.reset_blacklist()
 
-                        spot = self.pick_location(mutater.from_index(self.width))
-                        mutater.update_location(Mutate.to_index(spot, self.width))
+                        spot = self.pick_location()
+
+                        index = self.to_index(spot, index)
+            
+                        mutater.update(index)
                         
                 else:
                     break
 
 
     
-    def place(self, mutater: Mutate, where_to: List[int]) -> bool:
+    def place(self, mutater: Mutate, index: np.ndarray, where_to: List[int]) -> bool:
         """Returns true if word can and is placed. Otherwise, return false"""
         for letter in mutater.word:
-            getter = self.wordsearch[mutater.temp_ws_index] 
-            
+            getter = self.wordsearch[mutater.temp_ws_index[0]][mutater.temp_ws_index[1]] 
             if getter != '_' and getter != letter:
                 return False
 
             mutater.go(where_to)
 
-        mutater.reset_index()
+        mutater.update(index)
 
         for letter in mutater.word:
-            getter = self.wordsearch[mutater.temp_ws_index]
+            getter = self.wordsearch[mutater.temp_ws_index[0]][mutater.temp_ws_index[1]]
 
             if getter == '_':
-                self.wordsearch[mutater.temp_ws_index] = letter
+                self.wordsearch[mutater.temp_ws_index[0]][mutater.temp_ws_index[1]] = letter
             elif getter == letter:
                 pass
             else:
@@ -222,7 +219,7 @@ class WordPlacer():
 #main library for creating wordsearch
 class WordsearchGenerator(WordPlacer):
 
-    wordsearch: NDArray[str]
+    wordsearch: np.ndarray
     wordlist: Words
 
     
@@ -243,7 +240,7 @@ class WordsearchGenerator(WordPlacer):
             
     
     def __str__(self):
-        return f"{self.wordsearch}"
+        return f"{self.wordsearch}\nWordsearch with {self.wordsearch.size} elements created"
 
 
     #some vowels to make the wordsearch seem legit
@@ -275,11 +272,25 @@ class WordsearchGenerator(WordPlacer):
 
         self.fill_remaining()
 
+
+    def file_writer(self, wordlist: List[str], path: Path):
+        wspath = path.joinpath("Wordsearch.txt")
+        np.savetxt(wspath, self.wordsearch, delimiter=" ", newline="\n")
+
+        wlpath = path.joinpath("Wordlist.txt")
+        with wlpath.open("f") as f:
+            for word in wordlist:
+                f.write(word + "\n")
+
+
+
     
 
 
 words = Words()
+diction = Dictionary(Path("./Sources/myDictsorted.txt"))
 words.get_words()
-test = WordsearchGenerator(words, 200, 100)
+words_to_paste = words.random_words(diction)
+test = WordsearchGenerator(words, 1000, 1000)
 test.generate_wordlist()
-print(test)
+test.file_writer(words_to_paste, Path("./Output"))
