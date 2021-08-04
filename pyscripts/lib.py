@@ -10,6 +10,11 @@ import numpy as np
 
 SHORTEST_WORD_LEN = 2
 
+
+class InvalidWriteAttempt(Exception):
+    pass
+
+
 # holds dictionary and does word math
 class Dictionary:
 
@@ -85,6 +90,7 @@ class Words:
 class Mutate:
 
     word: str
+    direction: Tuple[int]
     # if we find out that we can't place a word, we need to go back
     temp_ws_index: Tuple[int]
     blacklist: List[Tuple[int]] = []
@@ -93,60 +99,19 @@ class Mutate:
         self.word = word
         self.temp_ws_index = index
 
-    def black_list(self, wrong_direction: np.ndarray):
-        self.blacklist.append(wrong_direction)
-
     def update(self, index: np.ndarray):
         self.temp_ws_index = index
+
+    def orient(self, direction: Tuple[int]):
+        self.direction = direction
+
+    def black_list(self):
+        self.blacklist.append(self.direction)
 
     def reset_blacklist(self):
         self.blacklist = []
 
-    def go(self, move: Tuple[int], width: int, length: int) -> bool:
-        self.temp_ws_index = (self.temp_ws_index[0] + move[0], self.temp_ws_index[1] + move[1])
-
-        if self.temp_ws_index[0] < 0 or self.temp_ws_index[1] < 0:
-            return False
-
-        elif self.temp_ws_index[1] >= width:
-            self.temp_ws_index[1] -= width
-            self.temp_ws_index[0] += 1
-        
-        if self.temp_ws_index >= length:
-            return False
-
-        return True
-
-# bundle the functions related to placing words
-class WordPlacer:
-    def get(self, index: np.ndarray) -> Optional[chr]:
-        try:
-            return self.wordsearch[index[0]][index[1]]
-        except IndexError:
-            return None
-
-
-    def to_index(self, index: Tuple[int], offset: int) -> Optional[Tuple[int]]:
-        temp = (index[0], index[1] + offset)
-
-        while temp[1] >= self.width:
-            temp[1] -= self.width
-            temp[0] += 1
-
-        if temp[0] >= self.length:
-            return None
-
-        return temp
-        
-    
-
-    # average out words across the
-    def pick_location(self) -> int:
-        top_dist = self.wordsearch.size // self.totalwords
-
-        return random.randint(0, top_dist)
-
-    def pick_direction(self, mutater: Mutate) -> List[int]:
+    def pick_direction(self):
         directions = [
             (0, -1),  # up
             (1, -1),  # upright
@@ -159,25 +124,103 @@ class WordPlacer:
         ]
 
         # filter out directions attempted and pick from remaining
-        return random.choice(
-            [x for x in filter(lambda k: k not in mutater.blacklist, directions)]
+        self.direction = random.choice(
+            [x for x in filter(lambda k: k not in self.blacklist, directions)]
         )
 
-    def start_placer(self):
+    def go(self, width: int, length: int) -> bool:
+        self.temp_ws_index = (
+            self.temp_ws_index[0] + self.direction[0],
+            self.temp_ws_index[1] + self.direction[1],
+        )
+
+        if self.temp_ws_index[0] < 0 or self.temp_ws_index[1] < 0:
+            return False
+
+        elif self.temp_ws_index[1] >= width:
+            self.temp_ws_index[1] -= width
+            self.temp_ws_index[0] += 1
+
+        if self.temp_ws_index[0] >= length:
+            return False
+
+        return True
+
+
+# bundle the functions related to placing words
+class WordPlacer:
+    def get(self, index: np.ndarray) -> Optional[str]:
+        try:
+            return self.wordsearch[index[0]][index[1]]
+        except IndexError:
+            return None
+
+    def to_index(self, index: Tuple[int], offset: int) -> Optional[Tuple[int]]:
+        temp = (index[0], index[1] + offset)
+
+        while temp[1] >= self.width:
+            temp = (temp[0] + 1, temp[1] - self.width)
+
+        if temp[0] >= self.length:
+            return None
+
+        return temp
+
+    # average out words across the
+    def pick_location(self) -> int:
+        top_dist = self.wordsearch.size // self.totalwords
+
+        return random.randint(0, top_dist)
+
+    def run_placer(self):
         index_holder = (0, 0)
 
-        for word in self.wordlist:
-            index_holder = self.to_index(index_holder, self.pick_location)
+        for word in self.wordlist.words:
+            new_holder = self.to_index(index_holder, self.pick_location())
 
+            # if run out of wordsearch, the wordsearch is malformed
             if index_holder is None:
                 return None
 
-            mutater = Mutate(word, index_holder)
+            mutater = Mutate(word, new_holder)
 
+            while not self.place_check(mutater):
+                if len(mutater.black_list) == 8:
+                    mutater.reset_blacklist()
+                    mutater.update(self.to_index(index_holder, self.pick_location()))
 
+            mutater.update(new_holder)
 
+            try:
+                self.place(mutater)
+            # hopefully this never runs
+            except InvalidWriteAttempt:
+                print("Program attempted to write to occupied spaces")
+                sys.exit(2)
 
+        index_holder = new_holder
 
+    def place_check(self, mutater: Mutate) -> bool:
+        mutater.pick_direction()
+
+        for character in mutater.word:
+            getter = self.get(mutater.temp_ws_index)
+            if getter != "_" and getter != character:
+                mutater.black_list()
+                return False
+
+            if not mutater.go(self.width, self.length):
+                mutater.black_list()
+                return False
+
+        return True
+
+    def place(self, mutater: Mutate):
+        for character in mutater.word:
+            self.wordsearch[mutater.temp_ws_index] = character
+
+            if not mutater.go(self.width, self.length):
+                raise InvalidWriteAttempt
 
 
 # main library for creating wordsearch
@@ -229,7 +272,7 @@ class WordsearchGenerator(WordPlacer):
 
     # pick random spots to put words, a random direction, and throw the word down
     def generate_wordlist(self):
-        self.place_words()
+        self.run_placer()
 
         self.random_vowels()
 
