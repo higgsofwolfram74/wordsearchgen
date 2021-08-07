@@ -39,34 +39,41 @@ class Dictionary:
 
 
 # Holds the user's list of words
-@dataclass
 class Words:
 
-    words: List[str] = field(default_factory=list)
+    words: List[str]
+
+    def __init__(self, words: List[str]):
+        self.words = words
 
     # letters taken up by words
     def word_bubble(self):
         return sum(map(len, self.words))
 
     # method to take words from user by command line
-    def get_words(self):
+    def get_word():
         user = ""
+        words = []
         while user != "n":
             print("Write a word or 'n' to stop.")
             user = input().lower().strip()
             # smallest words I'll accept is two letter words
             if len(user) >= 2:
-                self.words.append(user)
+                words.append(user)
 
-        if self.words:
-            self.words.sort(reverse=True, key=len)
+        return Words(words)
+
+        
+    def get_words():
+        user = input("Write in the words you want and hit enter:\n")
+        words = [word for word in user.lower().split(" ")]
+        return Words(words)
+
 
     # list of words from a file
     def load_words(self, path: Path):
         with path.open() as f:
-            self.words = [word for word in f.readlines().strip()].sorted(
-                reverse=True, key=len
-            )
+            return Words([word for word in f.readlines().strip()])
 
     # minimum number of elements for wordsearch
     def word_padding(self):
@@ -170,7 +177,7 @@ class WordPlacer:
     def pick_location(self) -> int:
         top_dist = self.wordsearch.size // self.totalwords
 
-        return random.randint(0, top_dist)
+        return random.randint(1, top_dist)
 
     def run_placer(self):
         index_holder = (0, 0)
@@ -256,11 +263,10 @@ class WordsearchGenerator(WordPlacer):
         vowels: str = "aeiouy"
         for _ in range(self.totalwords * self.numofletters):
             while True:
-                column = random.randint(0, self.width)
-                row = random.randint(0, self.length)
+                location = (random.randint(0, self.length - 1), random.randint(0, self.width - 1))
 
-                if self.wordsearch[column][row] == "_":
-                    self.wordsearch[column][row] = random.choice(vowels)
+                if self.wordsearch[location] == "_":
+                    self.wordsearch[location] = random.choice(vowels)
                     break
 
     def fill_remaining(self):
@@ -280,7 +286,7 @@ class WordsearchGenerator(WordPlacer):
 
     def file_writer(self, wordlist: List[str], path: Path):
         wspath = path.joinpath("Wordsearch.txt")
-        np.savetxt(wspath, self.wordsearch, fmt="%c", delimiter=" ", newline="\n")
+        np.savetxt(wspath, self.wordsearch, fmt="%c", delimiter="", newline="\n")
 
         wlpath = path.joinpath("Wordlist.txt")
         with wlpath.open("w") as f:
@@ -288,10 +294,10 @@ class WordsearchGenerator(WordPlacer):
                 f.write(word + "\n")
 
 
-words = Words()
-diction = Dictionary(Path("./Sources/myDictsorted.txt"))
-words.get_words()
-test = WordsearchGenerator(words, 500, 500)
-test.generate_wordlist()
-words_to_paste = words.random_words(diction)
-test.file_writer(words_to_paste, Path("./Output"))
+if __name__ == "__main__":
+    diction = Dictionary(Path("./Sources/myDict.txt"))
+    words = Words.get_words()
+    test = WordsearchGenerator(words, 500, 500)
+    test.generate_wordlist()
+    words_to_paste = words.random_words(diction)
+    test.file_writer(words_to_paste, Path("./Output"))
