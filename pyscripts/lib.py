@@ -3,6 +3,7 @@ import math
 import sys
 from pathlib import Path
 from typing import Tuple, List, Optional
+import re
 
 import numpy as np
 
@@ -51,6 +52,9 @@ class Words:
     def __str__(self):
         return f"{self.words}"
 
+    def __len__(self):
+        return len(self.words)
+
     # letters taken up by words
     def word_bubble(self):
         return sum(map(len, self.words))
@@ -87,15 +91,12 @@ class Words:
             padding += Dictionary.word_bubble(word) + word.len()
         return padding
 
-    # pick words to pad wordlist
-    def random_words(self, dictionary: Dictionary, num_of_words=1000) -> List[str]:
-        wordlist = []
-        for i in range(num_of_words):
-            wordlist.append(random.choice(dictionary.lexicon).strip())
+    def add_words(self, words: List[str]) -> None:
+        self.words += words
 
-        wordlist += self.words
-        random.shuffle(wordlist)
-        return wordlist
+    def shuffle(self):
+        random.shuffle(self.words)
+
 
 
 # holds data used by main logic code
@@ -187,7 +188,7 @@ class WordPlacer:
     def run_placer(self) -> None:
         index_holder = (0, 0)
 
-        for word in self.wordlist.words:
+        for word in self.words.words:
             new_holder = self.to_index(index_holder, self.pick_location())
 
             # if run out of wordsearch, the wordsearch is malformed
@@ -243,27 +244,18 @@ class WordsearchGenerator(WordPlacer):
     wordsearch: np.ndarray
     wordlist: Words
 
-    def __init__(self, wordlist: Words, width: int = 500, length: int = 500) -> None:
-        self.wordlist = wordlist
-        self.totalwords = len(self.wordlist.words)
-        self.numofletters = self.wordlist.word_bubble()
+    def __init__(self, wordlist: Words, dictionary: Dictionary) -> None:
+        self.words = wordlist
+        self.dictionary = dictionary
+        self.totalwords = len(self.words)
+        self.numofletters = self.words.word_bubble()
 
-        if self.numofletters >= math.sqrt(width * length):
-            self.width = width * self.numofletters
-            self.length = length * self.numofletters
-            self.wordsearch = np.array(
-                [["_" for i in range(self.width)] for i in range(self.length)]
-            )
+        self.length, self.width = self.totalwords * 100 + 50, self.totalwords * 100 + 50
+        self.wordsearch = np.array([['_' for i in range(self.width)] for j in range(self.length)])
 
-        else:
-            self.width = width
-            self.length = length
-            self.wordsearch = np.array(
-                [["_" for i in range(self.width)] for i in range(self.length)]
-            )
 
     def __str__(self):
-        return f"{self.wordsearch}\nWordsearch with {self.wordsearch.size} elements created"
+        return re.sub('[^a-z\n]', '', str(self.wordsearch))
 
     # some vowels to make the wordsearch seem legit
     def random_vowels(self) -> None:
@@ -283,8 +275,17 @@ class WordsearchGenerator(WordPlacer):
                 if elem == "_":
                     self.wordsearch[it.multi_index] = random.choice(consonants)
 
+
+    def random_words(self, num_of_words=1000) -> None:
+        wordlist = []
+        for i in range(num_of_words):
+            wordlist.append(random.choice(self.dictionary.lexicon).strip())
+
+        self.words.add_words(wordlist)
+        self.words.shuffle()
+
     # pick random spots to put words, a random direction, and throw the word down
-    def generate_wordlist(self) -> None:
+    def generate_wordsearch(self) -> None:
         self.run_placer()
 
         self.random_vowels()
@@ -304,7 +305,7 @@ class WordsearchGenerator(WordPlacer):
 if __name__ == "__main__":
     diction = Dictionary(Path("./Sources/myDict.txt"))
     words = Words.get_words()
-    test = WordsearchGenerator(words, 500, 500)
-    test.generate_wordlist()
+    test = WordsearchGenerator(words)
+    test.generate_wordsearch()
     words_to_paste = words.random_words(diction)
     test.file_writer(words_to_paste, Path("./Output"))
